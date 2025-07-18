@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bomb Defusal Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --glow-color: #ff3333;
+            --case-color: #2d3748; /* gray-800 */
+            --panel-color: #1a202c; /* gray-900 */
+            --text-color: #e2e8f0; /* gray-300 */
+            --accent-color: #4a5568; /* gray-600 */
+            --green-glow: #39ff14;
+        }
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #111827; /* gray-900 */
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+            overflow: hidden;
+        }
+        .bomb-casing {
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(145deg, #3a475b, #212936);
+            border: 4px solid #4a5568; /* gray-600 */
+            box-shadow: 0 0 15px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .timer-display {
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 0 0 5px var(--glow-color), 0 0 10px var(--glow-color), 0 0 15px var(--glow-color);
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+        .timer-display.low-time {
+            color: #ff8888;
+            --glow-color: #ff6666;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .wire {
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .wire:hover {
+            transform: translateY(-4px);
+            filter: brightness(1.2);
+        }
+        .wire.cut {
+            opacity: 0.3;
+            transform: scaleY(0.5) translateX(10px);
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.2) 5px, rgba(255,255,255,0.2) 10px);
+        }
+        .keypad-btn {
+            transition: all 0.1s ease-in-out;
+        }
+        .keypad-btn:active {
+            transform: scale(0.95);
+            background-color: #4a5568; /* gray-600 */
+        }
+        .simon-pad {
+            transition: background-color 0.1s linear, box-shadow 0.1s linear;
+        }
+        .simon-pad.lit {
+            filter: brightness(2.5);
+            box-shadow: 0 0 20px 5px currentColor;
+        }
+        .status-light {
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .status-light.on {
+            background-color: var(--green-glow);
+            box-shadow: 0 0 10px var(--green-glow);
+        }
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            z-index: 50;
+        }
+        .modal-content {
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .defused-text {
+            color: var(--green-glow);
+            text-shadow: 0 0 15px var(--green-glow);
+        }
+        .exploded-text {
+            color: var(--glow-color);
+            text-shadow: 0 0 15px var(--glow-color);
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+
+    <!-- Main Bomb Casing -->
+    <div id="bomb" class="bomb-casing w-full max-w-4xl p-4 sm:p-6 rounded-2xl grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+
+        <!-- Left Panel: Timer and Wires -->
+        <div class="bg-gray-900 p-4 rounded-lg border-2 border-gray-700 flex flex-col gap-4">
+            <!-- Timer Display -->
+            <div class="bg-black p-4 rounded-lg text-center">
+                <h2 class="text-xl text-gray-400 mb-2">TIME REMAINING</h2>
+                <div id="timer" class="timer-display text-6xl font-bold text-red-500">02:00</div>
+            </div>
+
+            <!-- Wire Module -->
+            <div class="bg-gray-800 p-4 rounded-lg flex-grow">
+                <h3 class="text-lg text-center mb-3 text-gray-400">WIRE MODULE</h3>
+                <div id="wire-box" class="space-y-3 p-4 bg-black rounded-md">
+                    <!-- Wires will be generated here by JS -->
+                </div>
+                <p id="wire-clue" class="text-center mt-3 text-sm text-yellow-300 h-8"></p>
+            </div>
+        </div>
+
+        <!-- Center Panel: Keypad and Simon Game -->
+        <div class="bg-gray-900 p-4 rounded-lg border-2 border-gray-700 flex flex-col gap-4">
+            <!-- Keypad Module -->
+            <div class="bg-gray-800 p-4 rounded-lg">
+                <h3 class="text-lg text-center mb-2 text-gray-400">DEACTIVATION CODE</h3>
+                <div id="keypad-display" class="bg-black text-right h-12 text-3xl p-2 rounded-md text-green-400 tracking-widest mb-3"></div>
+                <div class="grid grid-cols-3 gap-2">
+                    <!-- Keypad buttons will be generated here -->
+                </div>
+                 <p class="text-center mt-3 text-sm text-yellow-300">CODE: <span id="code-clue" class="tracking-widest">????</span></p>
+            </div>
+
+            <!-- Simon Says Module -->
+            <div class="bg-gray-800 p-4 rounded-lg flex-grow">
+                <h3 class="text-lg text-center mb-3 text-gray-400">MEMORY SEQUENCE</h3>
+                <div class="grid grid-cols-2 gap-3 aspect-square max-w-[250px] mx-auto">
+                    <div id="simon-green" data-color="green" class="simon-pad bg-green-700 rounded-full cursor-pointer" style="--tw-shadow-color: #16a34a;"></div>
+                    <div id="simon-red" data-color="red" class="simon-pad bg-red-700 rounded-full cursor-pointer" style="--tw-shadow-color: #dc2626;"></div>
+                    <div id="simon-blue" data-color="blue" class="simon-pad bg-blue-700 rounded-full cursor-pointer" style="--tw-shadow-color: #2563eb;"></div>
+                    <div id="simon-yellow" data-color="yellow" class="simon-pad bg-yellow-700 rounded-full cursor-pointer" style="--tw-shadow-color: #ca8a04;"></div>
+                </div>
+                 <div class="text-center mt-2">
+                    <button id="start-simon-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">START</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Status and Info -->
+        <div class="bg-gray-900 p-4 rounded-lg border-2 border-gray-700 flex flex-col gap-4">
+            <div class="bg-gray-800 p-4 rounded-lg">
+                <h3 class="text-lg text-center mb-4 text-gray-400">SYSTEM STATUS</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between bg-black p-2 rounded">
+                        <span>WIRE MODULE</span>
+                        <div id="status-wires" class="status-light w-6 h-6 rounded-full bg-gray-600"></div>
+                    </div>
+                    <div class="flex items-center justify-between bg-black p-2 rounded">
+                        <span>CODE LOCK</span>
+                        <div id="status-keypad" class="status-light w-6 h-6 rounded-full bg-gray-600"></div>
+                    </div>
+                    <div class="flex items-center justify-between bg-black p-2 rounded">
+                        <span>MEMORY BANK</span>
+                        <div id="status-simon" class="status-light w-6 h-6 rounded-full bg-gray-600"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg flex-grow">
+                 <h3 class="text-lg text-center mb-4 text-gray-400">DEFUSAL PROTOCOL</h3>
+                 <p class="text-sm text-gray-400 leading-relaxed">
+                    ATTENTION OPERATIVE:
+                    <br><br>
+                    All three modules must be deactivated to enable the master defusal system.
+                    <br><br>
+                    Failure to comply within the time limit will result in catastrophic failure.
+                    <br><br>
+                    Proceed with caution. Every second counts.
+                 </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Game Over/Win -->
+    <div id="modal" class="modal-backdrop items-center justify-center">
+        <div class="modal-content bg-gray-800 border-4 border-gray-600 p-8 rounded-2xl text-center max-w-sm sm:max-w-md">
+            <h2 id="modal-title" class="text-4xl sm:text-5xl font-bold mb-4"></h2>
+            <p id="modal-message" class="text-lg mb-6"></p>
+            <button id="restart-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg text-xl">
+                PLAY AGAIN
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM ELEMENTS ---
+            const timerDisplay = document.getElementById('timer');
+            const wireBox = document.getElementById('wire-box');
+            const wireClue = document.getElementById('wire-clue');
+            const keypadDisplay = document.getElementById('keypad-display');
+            const codeClue = document.getElementById('code-clue');
+            const simonPads = document.querySelectorAll('.simon-pad');
+            const startSimonBtn = document.getElementById('start-simon-btn');
+            const statusLights = {
+                wires: document.getElementById('status-wires'),
+                keypad: document.getElementById('status-keypad'),
+                simon: document.getElementById('status-simon'),
+            };
+            const modal = document.getElementById('modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const restartBtn = document.getElementById('restart-btn');
+
+            // --- GAME STATE ---
+            let timerInterval;
+            let timeLeft;
+            let puzzlesSolved = { wires: false, keypad: false, simon: false };
+            let gameOver = false;
+
+            // --- WIRE MODULE STATE ---
+            const WIRE_COLORS = ['red', 'blue', 'yellow', 'white', 'black'];
+            let wires = [];
+            let correctWireColor;
+
+            // --- KEYPAD MODULE STATE ---
+            let correctCode;
+            let currentInput = '';
+
+            // --- SIMON MODULE STATE ---
+            const SIMON_COLORS = ['green', 'red', 'blue', 'yellow'];
+            let simonSequence = [];
+            let playerSequence = [];
+            let simonLevel;
+            const SIMON_LEVELS_TO_WIN = 3;
+            let simonPuzzleActive = false;
+
+            // --- GAME INITIALIZATION ---
+            function init() {
+                // Reset game state
+                gameOver = false;
+                puzzlesSolved = { wires: false, keypad: false, simon: false };
+                timeLeft = 120; // 2 minutes
+                
+                // Reset UI
+                document.body.style.backgroundColor = '#111827';
+                timerDisplay.classList.remove('low-time');
+                modal.style.display = 'none';
+                for (const key in statusLights) {
+                    statusLights[key].classList.remove('on');
+                }
+
+                // Initialize modules
+                initTimer();
+                initWires();
+                initKeypad();
+                initSimon();
+
+                // Start timer
+                timerInterval = setInterval(updateTimer, 1000);
+            }
+
+            // --- TIMER MODULE ---
+            function initTimer() {
+                updateTimerDisplay();
+            }
+
+            function updateTimer() {
+                if (gameOver) return;
+                timeLeft--;
+                updateTimerDisplay();
+
+                if (timeLeft <= 30 && !timerDisplay.classList.contains('low-time')) {
+                    timerDisplay.classList.add('low-time');
+                }
+
+                if (timeLeft <= 0) {
+                    endGame(false); // Time ran out
+                }
+            }
+
+            function updateTimerDisplay() {
+                const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+                const seconds = (timeLeft % 60).toString().padStart(2, '0');
+                timerDisplay.textContent = `${minutes}:${seconds}`;
+            }
+            
+            function penalizeTime(seconds) {
+                if (gameOver) return;
+                timeLeft = Math.max(0, timeLeft - seconds);
+                updateTimerDisplay();
+                 if (timeLeft <= 0) {
+                    endGame(false);
+                }
+            }
+
+            // --- WIRE MODULE ---
+            function initWires() {
+                wireBox.innerHTML = '';
+                wires = [];
+                // Generate 4-6 wires
+                const numWires = Math.floor(Math.random() * 3) + 4;
+                const availableColors = [...WIRE_COLORS];
+                
+                for (let i = 0; i < numWires; i++) {
+                    const colorIndex = Math.floor(Math.random() * availableColors.length);
+                    const color = availableColors.splice(colorIndex, 1)[0];
+                    wires.push({ color, cut: false });
+                    
+                    const wireEl = document.createElement('div');
+                    wireEl.className = 'wire h-6 rounded-full';
+                    wireEl.style.backgroundColor = color;
+                    if(color === 'black') wireEl.style.border = '2px solid #4a5568';
+                    wireEl.dataset.color = color;
+                    wireEl.addEventListener('click', () => cutWire(wireEl));
+                    wireBox.appendChild(wireEl);
+                }
+
+                generateWireClue();
+            }
+
+            function generateWireClue() {
+                const wireCounts = wires.reduce((acc, wire) => {
+                    acc[wire.color] = (acc[wire.color] || 0) + 1;
+                    return acc;
+                }, {});
+
+                // Simple logic for determining the correct wire
+                if (!wireCounts.red && wireCounts.blue) {
+                    correctWireColor = 'blue';
+                    wireClue.textContent = "If no red, cut blue.";
+                } else if (wireCounts.white > 1) {
+                    correctWireColor = 'white';
+                    wireClue.textContent = "If more than one white, cut white.";
+                } else if (wireCounts.black && wireCounts.yellow) {
+                    correctWireColor = 'yellow';
+                    wireClue.textContent = "If black is present, cut yellow.";
+                } else if (wireCounts.red > 0 && !wireCounts.blue) {
+                    correctWireColor = 'red';
+                    wireClue.textContent = "With red but no blue, cut red.";
+                } else {
+                    // Fallback: cut the last wire
+                    correctWireColor = wires[wires.length - 1].color;
+                    wireClue.textContent = "When in doubt, cut the last wire.";
+                }
+            }
+
+            function cutWire(wireEl) {
+                if (gameOver || puzzlesSolved.wires) return;
+                
+                const color = wireEl.dataset.color;
+                wireEl.classList.add('cut');
+                
+                if (color === correctWireColor) {
+                    puzzlesSolved.wires = true;
+                    statusLights.wires.classList.add('on');
+                    wireClue.textContent = "Module Deactivated";
+                    checkWinCondition();
+                } else {
+                    penalizeTime(15);
+                    wireClue.textContent = "WRONG WIRE!";
+                }
+            }
+
+            // --- KEYPAD MODULE ---
+            function initKeypad() {
+                correctCode = Math.floor(1000 + Math.random() * 9000).toString();
+                // For debugging: console.log("Keypad Code:", correctCode);
+                codeClue.textContent = correctCode.split('').map((char, i) => i % 2 === 0 ? char : '?').join('');
+
+                currentInput = '';
+                updateKeypadDisplay();
+                
+                const keypadContainer = document.querySelector('.grid.grid-cols-3');
+                keypadContainer.innerHTML = '';
+                const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLR', '0', 'ENT'];
+                buttons.forEach(label => {
+                    const btn = document.createElement('button');
+                    btn.textContent = label;
+                    btn.className = 'keypad-btn bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-md text-xl';
+                    if (label === 'CLR') {
+                        btn.addEventListener('click', () => {
+                            currentInput = '';
+                            updateKeypadDisplay();
+                        });
+                    } else if (label === 'ENT') {
+                        btn.addEventListener('click', checkCode);
+                    } else {
+                        btn.addEventListener('click', () => {
+                            if (currentInput.length < 4) {
+                                currentInput += label;
+                                updateKeypadDisplay();
+                            }
+                        });
+                    }
+                    keypadContainer.appendChild(btn);
+                });
+            }
+
+            function updateKeypadDisplay() {
+                keypadDisplay.textContent = currentInput;
+            }
+
+            function checkCode() {
+                if (gameOver || puzzlesSolved.keypad) return;
+
+                if (currentInput === correctCode) {
+                    puzzlesSolved.keypad = true;
+                    statusLights.keypad.classList.add('on');
+                    keypadDisplay.style.color = '#39ff14';
+                    codeClue.textContent = "ACCESS GRANTED";
+                    checkWinCondition();
+                } else {
+                    keypadDisplay.style.color = '#ff3333';
+                    penalizeTime(10);
+                    setTimeout(() => {
+                        currentInput = '';
+                        updateKeypadDisplay();
+                        keypadDisplay.style.color = '#34d399';
+                    }, 500);
+                }
+            }
+
+            // --- SIMON MODULE ---
+            function initSimon() {
+                simonSequence = [];
+                playerSequence = [];
+                simonLevel = 1;
+                simonPuzzleActive = false;
+                startSimonBtn.disabled = false;
+                startSimonBtn.textContent = "START";
+            }
+
+            startSimonBtn.addEventListener('click', () => {
+                if (gameOver || puzzlesSolved.simon || simonPuzzleActive) return;
+                simonPuzzleActive = true;
+                startSimonBtn.disabled = true;
+                startSimonBtn.textContent = `LEVEL ${simonLevel}`;
+                addNewToSimonSequence();
+                playSimonSequence();
+            });
+
+            function addNewToSimonSequence() {
+                const nextColor = SIMON_COLORS[Math.floor(Math.random() * SIMON_COLORS.length)];
+                simonSequence.push(nextColor);
+            }
+
+            function playSimonSequence() {
+                let i = 0;
+                const interval = setInterval(() => {
+                    lightUpPad(simonSequence[i]);
+                    i++;
+                    if (i >= simonSequence.length) {
+                        clearInterval(interval);
+                        playerSequence = []; // Clear player sequence for new attempt
+                    }
+                }, 600);
+            }
+
+            function lightUpPad(color) {
+                const pad = document.getElementById(`simon-${color}`);
+                pad.classList.add('lit');
+                setTimeout(() => pad.classList.remove('lit'), 300);
+            }
+
+            simonPads.forEach(pad => {
+                pad.addEventListener('click', () => {
+                    if (!simonPuzzleActive || gameOver) return;
+                    const color = pad.dataset.color;
+                    lightUpPad(color);
+                    playerSequence.push(color);
+                    checkSimonInput();
+                });
+            });
+
+            function checkSimonInput() {
+                const currentIdx = playerSequence.length - 1;
+                if (playerSequence[currentIdx] !== simonSequence[currentIdx]) {
+                    // Wrong input
+                    penalizeTime(5);
+                    simonPuzzleActive = false;
+                    startSimonBtn.disabled = false;
+                    startSimonBtn.textContent = "RETRY";
+                    simonSequence = [];
+                    playerSequence = [];
+                    simonLevel = 1;
+                    return;
+                }
+
+                if (playerSequence.length === simonSequence.length) {
+                    // Level complete
+                    if (simonLevel >= SIMON_LEVELS_TO_WIN) {
+                        puzzlesSolved.simon = true;
+                        statusLights.simon.classList.add('on');
+                        startSimonBtn.textContent = "SEQUENCE MATCHED";
+                        startSimonBtn.disabled = true;
+                        checkWinCondition();
+                    } else {
+                        simonLevel++;
+                        playerSequence = [];
+                        startSimonBtn.textContent = `LEVEL ${simonLevel}`;
+                        setTimeout(() => {
+                            addNewToSimonSequence();
+                            playSimonSequence();
+                        }, 1000);
+                    }
+                }
+            }
+
+            // --- GAME END LOGIC ---
+            function checkWinCondition() {
+                if (puzzlesSolved.wires && puzzlesSolved.keypad && puzzlesSolved.simon) {
+                    endGame(true);
+                }
+            }
+
+            function endGame(isDefused) {
+                if (gameOver) return;
+                gameOver = true;
+                clearInterval(timerInterval);
+
+                if (isDefused) {
+                    modalTitle.textContent = "BOMB DEFUSED";
+                    modalTitle.className = "defused-text text-4xl sm:text-5xl font-bold mb-4";
+                    modalMessage.textContent = `Great work, operative! You defused the bomb with ${timeLeft} seconds to spare.`;
+                    document.body.style.backgroundColor = '#052e16'; // dark green
+                } else {
+                    modalTitle.textContent = "!!! BOOM !!!";
+                    modalTitle.className = "exploded-text text-4xl sm:text-5xl font-bold mb-4";
+                    modalMessage.textContent = "The bomb exploded. Better luck next time.";
+                    document.body.style.backgroundColor = '#450a0a'; // dark red
+                }
+                modal.style.display = 'flex';
+            }
+
+            restartBtn.addEventListener('click', init);
+
+            // --- INITIALIZE GAME ON LOAD ---
+            init();
+        });
+    </script>
+</body>
+</html>
